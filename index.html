@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#04060f" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="description" content="Rocket Pong — car-ball physics, ping pong rules. Hit the ball over the net with a rocket car." />
+  <title>Rocket Pong</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2304060f'/%3E%3Ccircle cx='38' cy='24' r='11' fill='%23dff9ff' stroke='%2322d3ee' stroke-width='3'/%3E%3Crect x='10' y='40' width='30' height='12' rx='3' fill='%230b5f86' stroke='%2322d3ee' stroke-width='3'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="view"></canvas>
+
+    <div id="hud" class="hud hidden">
+      <button class="hud-pause" id="pauseBtn" aria-label="Pause">II</button>
+      <div class="score">
+        <div class="side you"><span class="lbl">YOU</span><span class="num" id="scoreYou">0</span><span class="serve-dot" id="serveYou"></span></div>
+        <div class="mid"><div class="target" id="targetLbl">FIRST TO 7</div><div class="rally" id="rallyLbl">RALLY 0</div></div>
+        <div class="side bot"><span class="serve-dot" id="serveBot"></span><span class="num" id="scoreBot">0</span><span class="lbl">BOT</span></div>
+      </div>
+      <div class="gauges">
+        <div class="boost-meter"><svg viewBox="0 0 64 64"><circle class="track" cx="32" cy="32" r="27"/><circle class="fill" id="boostArc" cx="32" cy="32" r="27"/></svg><span id="boostNum">33</span></div>
+        <div class="speed"><span id="speedNum">0</span><small>KPH</small><b id="superTag">SUPERSONIC</b></div>
+      </div>
+      <div class="call hidden" id="call"><div class="call-main" id="callMain">POINT</div><div class="call-sub" id="callSub"></div></div>
+      <div class="keys-hint hidden" id="keysHint">WASD drive · SPACE jump (again + direction = flip) · SHIFT boost · Q/E or right-mouse air roll / powerslide · R re-serve · C ball cam · ESC pause · H hide</div>
+      <div class="debug hidden" id="debug"></div>
+    </div>
+
+    <div id="menu" class="screen">
+      <div class="panel">
+        <h1 class="logo">ROCKET<span>PONG</span></h1>
+        <p class="tag">Car-ball physics. Ping pong rules. Get it over the net.</p>
+        <div class="modes" role="radiogroup" aria-label="Game length">
+          <label><input type="radio" name="mode" value="quick" checked /><span>Quick<small>First to 7</small></span></label>
+          <label><input type="radio" name="mode" value="full" /><span>Full<small>First to 11, win by 2</small></span></label>
+        </div>
+        <button class="btn primary" id="playBtn">PLAY vs BOT</button>
+        <button class="btn ghost" id="howBtn">How to play</button>
+        <p class="fine">Single player vs AI · Medium difficulty</p>
+      </div>
+    </div>
+
+    <div id="pause" class="screen hidden">
+      <div class="panel">
+        <h2>Paused</h2>
+        <button class="btn primary" id="resumeBtn">Resume</button>
+        <button class="btn ghost" id="pauseHowBtn">How to play</button>
+        <button class="btn ghost" id="muteBtn">Sound: on</button>
+        <button class="btn ghost" id="restartBtn">Restart match</button>
+        <button class="btn ghost" id="quitBtn">Quit to menu</button>
+      </div>
+    </div>
+
+    <div id="over" class="screen hidden">
+      <div class="panel">
+        <h2 id="overTitle">You win!</h2>
+        <p class="final" id="overScore">7 – 4</p>
+        <button class="btn primary" id="againBtn">Rematch</button>
+        <button class="btn ghost" id="overMenuBtn">Menu</button>
+      </div>
+    </div>
+
+    <div id="howto" class="screen howto hidden" role="dialog" aria-label="How to play">
+      <div class="panel wide">
+        <h2>How to play</h2>
+        <ul class="rules">
+          <li><b>Hit the ball over the net</b> so it bounces on the bot's side.</li>
+          <li>The ball must <b>bounce in the court lines</b> on their side — wall first, out, or into the net is a <b>fault</b>.</li>
+          <li>If it bounces <b>twice</b> on their side before they return it, it's your <b>point</b>.</li>
+          <li>Serve: the ball drops on the server's side — hit it over. Serve swaps every 2 points.</li>
+          <li>Jump into the ball to lift it. Boost pads refill your boost.</li>
+        </ul>
+        <div class="ctrl-grid">
+          <div class="ctrl-col touch-only"><h3>Touch</h3>
+            <p><b>Left thumb</b> — joystick: drive & steer</p>
+            <p><b>JUMP</b> — tap; tap again in the air + push the stick to flip</p>
+            <p><b>BOOST</b> — hold</p>
+            <p><b>AIR ROLL</b> — roll in the air · drift on the ground</p></div>
+          <div class="ctrl-col"><h3>Keyboard</h3>
+            <p><b>W A S D</b> / arrows — drive</p>
+            <p><b>Space</b> — jump; again + direction = flip</p>
+            <p><b>Shift</b> — boost · <b>Q / E</b> — air roll</p>
+            <p><b>R</b> re-serve · <b>C</b> ball cam · <b>Esc</b> pause</p></div>
+        </div>
+        <button class="btn primary" id="howClose">Got it <span id="howCount"></span></button>
+      </div>
+    </div>
+
+    <div id="rotate" class="rotate hidden"><div>⟳</div><p>Turn your phone sideways to play</p></div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
