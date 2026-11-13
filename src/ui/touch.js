@@ -31,8 +31,11 @@ export function createTouchControls(host, input) {
     knob.style.transform = 'translate(-50%, -50%)';
   };
 
+  // Touch (and pen) only: a mouse must never drive the car, even where the touch UI is showing.
+  const isMouse = (e) => e.pointerType === 'mouse';
+
   zone.addEventListener('pointerdown', (e) => {
-    if (stickId !== null) return;
+    if (stickId !== null || isMouse(e)) return;
     e.preventDefault();
     stickId = e.pointerId;
     try { zone.setPointerCapture(e.pointerId); } catch { /* synthetic / already released pointer */ }
@@ -84,6 +87,7 @@ export function createTouchControls(host, input) {
     };
     b.addEventListener('pointerdown', (e) => {
       e.preventDefault();
+      if (isMouse(e)) return;
       set(true, e.pointerId);
       try { b.setPointerCapture(e.pointerId); } catch { /* not capturable: window listeners below still release it */ }
     });

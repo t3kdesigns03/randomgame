@@ -47,6 +47,7 @@ function startMatch() {
   $('call').classList.add('hidden');
   $('keysHint').classList.toggle('hidden', isTouch || store.get('rp_keys_hint') === '0');
   touch.reset();
+  input.clearTaps();
   sfx.unlock();
   tryLandscape();
 }
@@ -55,6 +56,7 @@ function pause(on) {
   paused = on;
   show(on ? 'pause' : null);
   touch.reset();
+  input.clearTaps();
   $('muteBtn').textContent = `Sound: ${sfx.muted ? 'off' : 'on'}`;
 }
 function quitToMenu() {

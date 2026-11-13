@@ -9,8 +9,11 @@ import { BotAI } from './ai.js';
 
 export const SERVE_FREEZE = 1.0;    // s the ball hangs before dropping (cars can position)
 export const POINT_PAUSE = 2.0;     // s showing the call before the next serve
-export const SERVE_DROP_HEIGHT = 650;
-export const SERVE_DROP_DEPTH = 1900;
+// Game settings, not RL values. Tuned by bot-vs-bot sweep: a higher drop bounces higher, so the server
+// strikes a rising ball and sends a loopier serve the receiver can reach and return. 650/1900 averaged
+// 1.55 hits a point; anywhere in ~1125-1350 high x 1700-1900 deep gives ~2.1-2.3.
+export const SERVE_DROP_HEIGHT = 1275;
+export const SERVE_DROP_DEPTH = 1800;
 
 export class Game {
   /**
@@ -30,6 +33,8 @@ export class Game {
     this.lastCall = null;
     this.feed = [];            // render/audio events since last drain
     this.playerControls = neutralControls();
+    this.serveDropHeight = opts.serveDropHeight ?? SERVE_DROP_HEIGHT;
+    this.serveDropDepth = opts.serveDropDepth ?? SERVE_DROP_DEPTH;
     this.setupServe();
   }
 
@@ -42,7 +47,7 @@ export class Game {
     for (const pad of w.pads) pad.timer = 0;
     const s = this.match.server;
     const x = (this.rng() - 0.5) * 900;
-    w.ball.pos = v3(x, s * SERVE_DROP_DEPTH, SERVE_DROP_HEIGHT);
+    w.ball.pos = v3(x, s * this.serveDropDepth, this.serveDropHeight);
     w.ball.vel = v3();
     w.ball.ang = v3();
     w.ball.frozen = true;
