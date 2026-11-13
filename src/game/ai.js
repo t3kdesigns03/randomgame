@@ -15,6 +15,9 @@ export const AI_REACTION_TIME = 0.15;   // s before the bot starts reacting to a
 export const AI_AIM_MARGIN = 250;       // uu the bot tries to keep between its landing spot and the lines
 export const AI_MISTAKE_KINDS = ['late', 'offset', 'aim', 'power']; // what a "mistake" can be
 const PREDICT_SECONDS = 3.5;
+export const AI_ARRIVE_LAG = 0.033;     // s the drive controller tends to reach the contact point early; measured, given back
+const AI_COMMIT_TIME = 0.4;             // s before contact after which the bot holds its line through the ball
+const AI_COMMIT_DIST = 160;             // uu around the contact point that counts as committed
 export const AI_PLAN_BUDGET_MS = 1.2;   // planning CPU per physics tick; the rest continues next tick (smooth frames on phones)
 const now_ms = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
@@ -82,7 +85,10 @@ function testShot(ballState, team, dir, speed, jump) {
   ball.frozen = false;
   const yaw = Math.atan2(dir.y, dir.x);
   const car = makeCar(team, v3(0, 0, K.CAR_REST_HEIGHT), yaw);
-  const back = 140 + K.BALL_RADIUS;
+  // start just short of contact (hitbox nose + ball radius + ~2 ticks of travel) and let the ball keep
+  // moving: slower shots used to spend many ticks closing on a ball frozen in place
+  const nose = K.CAR_HITBOX.x / 2 + K.CAR_HITBOX_OFFSET.x;
+  const back = nose + K.BALL_RADIUS + Math.max(6, speed * K.DT * 2);
   car.pos = v3(ball.pos.x - dir.x * back, ball.pos.y - dir.y * back, jump ? jump.z : K.CAR_REST_HEIGHT);
   car.vel = v3(dir.x * speed, dir.y * speed, jump ? jump.vz : 0);
   if (jump) {
@@ -91,9 +97,11 @@ function testShot(ballState, team, dir, speed, jump) {
   }
   const c = neutralControls(); c.throttle = 1; c.jump = !!jump;
   let hit = null, ticks = 0;
+  const ev = [];
   for (; ticks < 40 && !hit; ticks++) {
     stepCar(car, c, K.DT);
     hit = collideCarBall(car, ball, 1000 + ticks * 3);
+    if (!hit) { ev.length = 0; stepBall(ball, K.DT, ev); }
   }
   if (!hit) return null;
   return { pred: predictBall(ball, 4, true), carAt: { x: car.pos.x, y: car.pos.y }, lead: ticks * K.DT };
@@ -349,7 +357,7 @@ export class BotAI {
     const perp = { x: -d.y, y: d.x };
     return {
       leave: false,
-      tAbs: now + s.t,                             // scratch sim holds the ball at the sample while the car closes in
+      tAbs: now + s.t + pick.lead - K.DT,          // + the few ticks the scratch car took to reach the (moving) ball
       ballZ: s.z,
       aim: d,
       speed: pick.sp,
@@ -362,7 +370,7 @@ export class BotAI {
   execute(car, c, now) {
     if (car.onGround && car.groundN.z < 0.75) return this.wallRecover(car, c);
     const p = this.plan;
-    const T = p.tAbs - now;
+    const T = p.tAbs - now + AI_ARRIVE_LAG;
     if (T < -0.25) { this.plan = null; return c; }
     {
       const ax = p.target.x - car.pos.x, ay = p.target.y - car.pos.y;
@@ -375,7 +383,10 @@ export class BotAI {
     const { along, side } = ap;
     const dist = ap.len;
     let gx = ap.gx, gy = ap.gy;
-    if (ap.inCone) {
+    // committed: right at the contact point and a touch late. Hold the line instead of circling back
+    // to a staging point, which swerved away from a ball the car was about to hit.
+    const committed = !ap.inCone && T < AI_COMMIT_TIME && along > -AI_COMMIT_DIST && Math.abs(side) < AI_COMMIT_DIST;
+    if (ap.inCone || committed) {
       // in the approach cone: steer at a point past the contact point, over-correcting toward the aim line
       gx = p.target.x + p.aim.x * 350 + -p.aim.y * side * 0.6;
       gy = p.target.y + p.aim.y * 350 + p.aim.x * side * 0.6;
@@ -417,7 +428,10 @@ export class BotAI {
       want = clamp(want, 0, K.CAR_MAX_SPEED);
       const err = want - fs;
       c.throttle = clamp(err / 200, -1, 1);
-      c.boost = err > 250 && Math.abs(ang) < 0.3 && fs > -100 && car.boost > 0;
+      // boost for big speed gaps, and for any gap the throttle alone can't close (it fades out near
+      // 1400 uu/s); the run-up timing above assumes boost all the way to a fast contact speed
+      const needBoost = err > 250 || (want > 1300 && err > 20);
+      c.boost = needBoost && Math.abs(ang) < 0.3 && fs > -100 && car.boost > 0;
       if (Math.abs(ang) > 2.4 && dist < 700 && fs < 400) { c.throttle = -1; c.steer = -c.steer; c.boost = false; }
       c.handbrake = Math.abs(ang) > 1.7 && fs > 800;
       c.stickX = c.steer; c.stickY = c.throttle;
