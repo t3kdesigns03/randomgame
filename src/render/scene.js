@@ -454,7 +454,9 @@ export class GameView {
     const f = new THREE.Vector3(), u = new THREE.Vector3(), r = new THREE.Vector3();
     w.cars.forEach((car, i) => {
       const v = this.cars[i];
-      tv(car.R.f, f); tv(car.R.u, u);
+      // tv() also scales uu -> metres; the basis must be unit length or setFromRotationMatrix
+      // returns a degenerate (near-identity) quaternion and the nose never follows R.f.
+      tv(car.R.f, f).normalize(); tv(car.R.u, u).normalize();
       r.crossVectors(f, u); // mesh z = right
       m.makeBasis(f, u, r);
       v.group.quaternion.setFromRotationMatrix(m);
