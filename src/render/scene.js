@@ -394,7 +394,7 @@ export class GameView {
     buildNet(this.scene);
 
     // ball
-    const ballGeo = new THREE.IcosahedronGeometry(K.BALL_RADIUS * S, 1);
+    const ballGeo = new THREE.IcosahedronGeometry(K.BALL_VISUAL_RADIUS * S, 1);
     this.ball = new THREE.Group();
     this.ball.add(new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color: 0xdff9ff })));
     this.ball.add(new THREE.LineSegments(new THREE.EdgesGeometry(ballGeo), new THREE.LineBasicMaterial({ color: 0x22d3ee })));
