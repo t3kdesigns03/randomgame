@@ -27,6 +27,10 @@ body { position: fixed; inset: 0; touch-action: none; user-select: none; -webkit
 .hud-pause { pointer-events: auto; position: absolute; top: calc(8px + var(--safe-t)); left: calc(10px + var(--safe-l));
   width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--edge); background: rgba(4, 8, 22, 0.6);
   color: var(--ink); font-weight: 800; letter-spacing: -1px; font-size: 15px; }
+.hud-cam { pointer-events: auto; position: absolute; top: calc(8px + var(--safe-t)); left: calc(58px + var(--safe-l));
+  width: 46px; height: 40px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(4, 8, 22, 0.6);
+  color: var(--dim); font: 800 9px/1.15 inherit; font-family: inherit; letter-spacing: 1px; touch-action: manipulation; }
+.hud-cam.on { color: var(--gold); border-color: rgba(255, 242, 122, 0.6); }
 .score { position: absolute; top: calc(6px + var(--safe-t)); left: 50%; transform: translateX(-50%);
   display: flex; align-items: center; gap: 10px; padding: 4px 12px; border-radius: 14px;
   background: linear-gradient(180deg, rgba(4, 8, 22, 0.75), rgba(4, 8, 22, 0.35)); border: 1px solid rgba(255, 255, 255, 0.08); }

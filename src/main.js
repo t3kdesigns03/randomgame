@@ -119,6 +119,18 @@ $('pauseHowBtn').onclick = () => showHowTo(false);
 $('howClose').onclick = hideHowTo;
 $('howto').addEventListener('pointerdown', (e) => { if (e.target === $('howto')) hideHowTo(); });
 $('pauseBtn').onclick = () => pause(true);
+// ball cam: Space on desktop, the CAM button on phones (the choice is remembered)
+function setBallCam(on) {
+  view.ballCam = on;
+  store.set('rp_ballcam', on ? '1' : '0');
+  const b = $('camBtn');
+  b.classList.toggle('on', on);
+  b.innerHTML = on ? 'BALL<br>CAM' : 'CAR<br>CAM';
+  b.setAttribute('aria-pressed', String(on));
+}
+setBallCam(store.get('rp_ballcam') === '1');
+$('camBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); if (running && !paused) setBallCam(!view.ballCam); });
+$('camBtn').addEventListener('click', (e) => { if (e.detail === 0 && running && !paused) setBallCam(!view.ballCam); }); // keyboard activation
 $('resumeBtn').onclick = () => pause(false);
 $('restartBtn').onclick = startMatch;
 $('quitBtn').onclick = quitToMenu;
@@ -130,7 +142,7 @@ for (const r of document.querySelectorAll('input[name=mode]')) r.addEventListene
 input.onAction = (a) => {
   if (a === 'pause') { if (!$('howto').classList.contains('hidden')) hideHowTo(); else if (running) pause(!paused); }
   else if (a === 'reserve' && running && !paused) { game.reserve(); view.resetTrails(); }
-  else if (a === 'ballcam' && running && !paused) view.ballCam = !view.ballCam;
+  else if (a === 'ballcam' && running && !paused) setBallCam(!view.ballCam);
   else if (a === 'mute') sfx.toggleMute();
   else if (a === 'debug') debug = !debug;
   else if (a === 'help') { const h = $('keysHint'); h.classList.toggle('hidden'); store.set('rp_keys_hint', h.classList.contains('hidden') ? '0' : '1'); }
