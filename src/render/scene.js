@@ -329,6 +329,8 @@ export class GameView {
     this.scene.fog = new THREE.Fog(COLORS.bg, 40, 120);
     this.camera = new THREE.PerspectiveCamera(70, 1, 0.1, 400);
     this.ballCam = false;
+    this.rearView = false; // held: look back over the car (overrides ball cam while held, like RL)
+    this.wasRear = false;
     this.fovKick = 0;
 
     this.scene.add(new THREE.HemisphereLight(0x9fdcff, 0x220a30, 1.4));
@@ -495,7 +497,11 @@ export class GameView {
     const ballP = tv(game.world.ball.pos, new THREE.Vector3());
     const dist = 3.4, height = 1.45; // ~RL default cam (distance 270-340 uu, height 100-145 uu)
     let desiredFwd;
-    if (this.ballCam) {
+    const rear = this.rearView;
+    if (rear) {
+      desiredFwd = tv(car.R.f, new THREE.Vector3()).negate();
+      desiredFwd.y = 0;
+    } else if (this.ballCam) {
       desiredFwd = new THREE.Vector3().subVectors(ballP, carP);
       desiredFwd.y = 0;
     } else {
@@ -509,20 +515,22 @@ export class GameView {
     }
     if (desiredFwd.lengthSq() < 1e-4) desiredFwd.copy(this.camFwd);
     desiredFwd.normalize();
-    const k = 1 - Math.exp(-dt * (this.ballCam ? 7 : 9));
+    const snap = rear !== this.wasRear; // rear view switches instantly, both ways
+    this.wasRear = rear;
+    const k = snap ? 1 : 1 - Math.exp(-dt * (this.ballCam && !rear ? 7 : rear ? 20 : 9));
     this.camFwd.lerp(desiredFwd, k).normalize();
     const target = carP.clone().addScaledVector(this.camFwd, -dist);
     target.y = Math.max(carP.y, 0.2) + height;
-    this.camPos.lerp(target, 1 - Math.exp(-dt * 14));
+    if (snap) this.camPos.copy(target); else this.camPos.lerp(target, 1 - Math.exp(-dt * 14));
     // keep the camera inside the arena
     this.camPos.x = Math.max(-K.ARENA_HALF_X * S + 0.6, Math.min(K.ARENA_HALF_X * S - 0.6, this.camPos.x));
     this.camPos.z = Math.max(-K.ARENA_HALF_Y * S + 0.6, Math.min(K.ARENA_HALF_Y * S - 0.6, this.camPos.z));
     this.camPos.y = Math.min(K.ARENA_HEIGHT * S - 0.5, Math.max(0.4, this.camPos.y));
     this.camera.position.copy(this.camPos);
-    const look = this.ballCam
+    const look = this.ballCam && !rear
       ? ballP.clone().lerp(carP, 0.15)
       : carP.clone().addScaledVector(this.camFwd, 2.2).add(new THREE.Vector3(0, 0.55, 0));
-    this.camLook.lerp(look, 1 - Math.exp(-dt * 16));
+    if (snap) this.camLook.copy(look); else this.camLook.lerp(look, 1 - Math.exp(-dt * 16));
     this.camera.lookAt(this.camLook);
     const kick = car.supersonic ? 7 : 0;
     this.fovKick += (kick - this.fovKick) * (1 - Math.exp(-dt * 5));
