@@ -125,7 +125,7 @@ function accelProfile(u, s, boost) {
   let v = u, t = 0, d = 0;
   const h = 1 / 60;
   while (v < s && t < 4) {
-    const a = curve(K.THROTTLE_ACCEL_CURVE, v) + (boost ? K.BOOST_ACCEL_GROUND : 0);
+    const a = 4 * K.THROTTLE_ACCEL_PER_WHEEL * curve(K.DRIVE_SPEED_TORQUE_FACTOR_CURVE, v) + (boost ? K.BOOST_ACCEL_GROUND : 0);
     if (a <= 0) return { t: Infinity, d: Infinity };
     const dv = Math.min(a * h, s - v);
     const dt = dv / a;
