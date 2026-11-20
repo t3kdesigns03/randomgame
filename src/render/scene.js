@@ -21,6 +21,8 @@ const COLORS = {
   boost: 0xffa630,
 };
 
+const smooth01 = (t) => { const x = Math.max(0, Math.min(1, t)); return x * x * (3 - 2 * x); };
+
 // ---------------------------------------------------------------- textures
 function glowTexture(inner = 'rgba(255,255,255,1)', outer = 'rgba(255,255,255,0)') {
   const c = document.createElement('canvas');
@@ -258,63 +260,109 @@ class Ribbon {
 
 // ---------------------------------------------------------------- car
 function buildCar(team) {
+  // Original armored muscle-car design: long sloped nose, low tinted canopy, wide arched fenders,
+  // swept rear fins and a rear jet turbine. Dark armor + team-colour light strips (readable in the
+  // dark arena). Local mesh frame: x forward, y up, z right; origin is 17 uu above the floor.
   const color = team < 0 ? COLORS.player : COLORS.bot;
-  const body = team < 0 ? COLORS.playerBody : COLORS.botBody;
   const g = new THREE.Group();
-  const L = K.CAR_HITBOX.x * S, W = K.CAR_HITBOX.y * S, H = K.CAR_HITBOX.z * S;
-  const ox = K.CAR_HITBOX_OFFSET.x * S, oz = K.CAR_HITBOX_OFFSET.z * S;
-  const bodyMat = new THREE.MeshLambertMaterial({ color: body, emissive: body, emissiveIntensity: 0.35 });
-  const edgeMat = new THREE.LineBasicMaterial({ color });
-  const addBox = (lx, ly, lz, x, y, z, mat = bodyMat, edges = true) => {
-    const geo = new THREE.BoxGeometry(lx, ly, lz);
-    const m = new THREE.Mesh(geo, mat);
-    m.position.set(x, y, z);
-    g.add(m);
-    if (edges) {
-      const e = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat);
-      e.position.copy(m.position);
-      g.add(e);
+  const armor = new THREE.MeshStandardMaterial({ color: 0x272b36, roughness: 0.45, metalness: 0.35, emissive: team < 0 ? COLORS.playerBody : COLORS.botBody, emissiveIntensity: 0.2, flatShading: true });
+  const trim = new THREE.MeshStandardMaterial({ color: 0x0c0e13, roughness: 0.7, metalness: 0.2, flatShading: true });
+  const glass = new THREE.MeshStandardMaterial({ color: 0x0a1626, roughness: 0.12, metalness: 0.8, emissive: color, emissiveIntensity: 0.06, flatShading: true });
+  const lightMat = new THREE.MeshBasicMaterial({ color });
+  const headMat = new THREE.MeshBasicMaterial({ color: 0xe8fbff });
+  const tailMat = new THREE.MeshBasicMaterial({ color: 0xff2a3a });
+
+  const extrude = (pts, depth, bevel, taper) => {
+    const shape = new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y)));
+    const geo = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: bevel > 0, bevelSize: bevel, bevelThickness: bevel, bevelSegments: 2, curveSegments: 1 });
+    geo.translate(0, 0, -depth / 2);
+    if (taper) {
+      const p = geo.attributes.position;
+      for (let i = 0; i < p.count; i++) p.setZ(i, p.getZ(i) * taper(p.getX(i), p.getY(i)));
+      geo.computeVertexNormals();
     }
-    return m;
+    return geo;
   };
-  // local mesh frame: x forward, y up, z right
-  // low wedge-ish body: chassis sits down between the wheels (origin is 17 uu above the floor)
-  addBox(L, 0.2, W, ox, 0.06, 0);                                       // chassis
-  addBox(L * 0.34, 0.07, W * 0.92, ox + L * 0.3, 0.19, 0);             // hood
-  addBox(L * 0.42, 0.15, W * 0.74, ox - L * 0.12, 0.23, 0);            // cabin
-  addBox(L * 0.1, 0.035, W * 1.06, ox - L * 0.48, 0.3, 0);             // rear wing
-  // nose stripe
-  addBox(L * 0.3, 0.01, W * 0.16, ox + L * 0.3, 0.228, 0, new THREE.MeshBasicMaterial({ color }), false);
-  // wheels
-  const wheelGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.13, 10);
-  wheelGeo.rotateX(Math.PI / 2);
-  const wheelMat = new THREE.MeshBasicMaterial({ color: 0x0a0d18 });
-  const rimMat = new THREE.LineBasicMaterial({ color });
-  for (const [x, z] of [[0.5, 0.43], [0.5, -0.43], [-0.32, 0.43], [-0.32, -0.43]]) {
-    const w = new THREE.Mesh(wheelGeo, wheelMat);
-    w.position.set(x, -0.02, z);
-    g.add(w);
-    const e = new THREE.LineSegments(new THREE.EdgesGeometry(wheelGeo, 30), rimMat);
-    e.position.copy(w.position);
-    g.add(e);
+  const add = (geo, mat, x = 0, y = 0, z = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); g.add(m); return m; };
+
+  // main hull: sloped nose -> cowl -> flat rear deck; narrows toward the nose
+  add(extrude([[-0.46, -0.06], [0.64, -0.06], [0.76, 0.0], [0.76, 0.05], [0.42, 0.15], [0.12, 0.2], [-0.3, 0.22], [-0.47, 0.18]],
+    0.66, 0.03, (x) => 1 - 0.32 * Math.max(0, Math.min(1, (x - 0.25) / 0.5))), armor);
+  // canopy: low, set back, tumblehome (narrower at the roof)
+  add(extrude([[-0.36, 0.2], [0.14, 0.2], [-0.02, 0.33], [-0.2, 0.345]], 0.44, 0.02,
+    (x, y) => 1 - 0.4 * Math.max(0, Math.min(1, (y - 0.2) / 0.15))), glass);
+  // hood scoop / spine
+  add(extrude([[-0.02, 0.18], [0.5, 0.12], [0.5, 0.14], [0.06, 0.23]], 0.12, 0.01), trim);
+
+  // arched fender pods over the wheels (top half-cylinders), rear ones wider
+  const fender = (r, w) => { const geo = new THREE.CylinderGeometry(r, r, w, 14, 1, false, Math.PI / 2, Math.PI); geo.rotateX(Math.PI / 2); return geo; };
+  const fFront = fender(0.205, 0.2), fRear = fender(0.225, 0.25);
+  for (const s of [1, -1]) {
+    add(fFront, armor, 0.5, -0.01, s * 0.41);
+    add(fRear, armor, -0.32, 0.0, s * 0.42);
   }
-  // boost flame (cone pointing backwards)
-  const flameGeo = new THREE.ConeGeometry(0.13, 0.7, 8, 1, true);
+
+  // swept rear fins
+  const finGeo = extrude([[-0.44, 0.16], [-0.6, 0.4], [-0.52, 0.41], [-0.24, 0.21]], 0.025, 0.008);
+  for (const s of [1, -1]) {
+    const fin = add(finGeo, armor, 0, 0, s * 0.25);
+    fin.rotation.x = s * 0.18; // splay outward
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.012, 0.034), lightMat); // lit leading edge
+    edge.position.set(-0.38, 0.312, 0);
+    edge.rotation.z = -0.62;
+    fin.add(edge);
+  }
+
+  // rear jet turbine (boost comes out of here)
+  const turbGeo = new THREE.CylinderGeometry(0.1, 0.12, 0.14, 12, 1, true); turbGeo.rotateZ(Math.PI / 2);
+  add(turbGeo, trim, -0.5, 0.08, 0);
+  const coreGeo = new THREE.CircleGeometry(0.085, 12); coreGeo.rotateY(-Math.PI / 2);
+  const turbineCore = add(coreGeo, new THREE.MeshBasicMaterial({ color: 0x3a1c00 }), -0.48, 0.08, 0);
+
+  // lights: team-colour side strips + fin edges, headlight bar, tail lights
+  const box = (lx, ly, lz) => new THREE.BoxGeometry(lx, ly, lz);
+  for (const s of [1, -1]) {
+    add(box(0.5, 0.014, 0.012), lightMat, -0.02, 0.09, s * 0.365);
+    add(box(0.16, 0.018, 0.02), tailMat, -0.485, 0.15, s * 0.2);
+  }
+  add(box(0.02, 0.022, 0.34), headMat, 0.765, 0.03, 0);
+
+  // wheels: chunky tyres, dark rims with a team-colour ring; spun in render() from forward speed
+  const wheels = [];
+  const wheel = (r, w, x, y, z) => {
+    const wg = new THREE.Group();
+    const tyre = new THREE.CylinderGeometry(r, r, w, 16); tyre.rotateX(Math.PI / 2);
+    wg.add(new THREE.Mesh(tyre, new THREE.MeshStandardMaterial({ color: 0x08090c, roughness: 0.9, flatShading: true })));
+    const rim = new THREE.CylinderGeometry(r * 0.6, r * 0.6, w + 0.006, 6); rim.rotateX(Math.PI / 2);
+    wg.add(new THREE.Mesh(rim, trim));
+    const ring = new THREE.RingGeometry(r * 0.62, r * 0.74, 16);
+    const rm = new THREE.Mesh(ring, lightMat); rm.position.z = Math.sign(z) * (w / 2 + 0.004); if (z < 0) rm.rotation.y = Math.PI;
+    wg.add(rm);
+    wg.position.set(x, y, z);
+    g.add(wg); wheels.push({ g: wg, r });
+  };
+  for (const s of [1, -1]) {
+    wheel(0.155, 0.15, 0.5, -0.015, s * 0.43);
+    wheel(0.17, 0.19, -0.32, 0.0, s * 0.44);
+  }
+
+  // boost flame (cone pointing backwards) out of the turbine
+  const flameGeo = new THREE.ConeGeometry(0.11, 0.7, 8, 1, true);
   flameGeo.rotateZ(Math.PI / 2);
   flameGeo.translate(-0.35, 0, 0);
   const flame = new THREE.Mesh(flameGeo, new THREE.MeshBasicMaterial({ color: COLORS.boost, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
-  flame.position.set(ox - L / 2, 0.08, 0);
+  flame.position.set(-0.52, 0.08, 0);
   g.add(flame);
   const flameCore = new THREE.Mesh(flameGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }));
   flameCore.scale.set(0.6, 0.5, 0.5);
   flameCore.position.copy(flame.position);
   g.add(flameCore);
   // underglow
-  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
-  glow.scale.set(2.6, 2.6, 1);
-  glow.position.set(ox, 0, 0);
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false }));
+  glow.scale.set(2.4, 2.4, 1);
+  glow.position.set(0.1, -0.1, 0);
   g.add(glow);
-  return { group: g, flame, flameCore, color };
+  return { group: g, flame, flameCore, color, wheels, turbineCore };
 }
 
 // ---------------------------------------------------------------- view
@@ -332,8 +380,13 @@ export class GameView {
     this.rearView = false; // held: look back over the car (overrides ball cam while held, like RL)
     this.wasRear = false;
     this.fovKick = 0;
+    this.fovExtra = 0;   // ball cam widens a little when the ball is too high to frame with the car
+    this.camHeight = 1.45;
 
     this.scene.add(new THREE.HemisphereLight(0x9fdcff, 0x220a30, 1.4));
+    const sun = new THREE.DirectionalLight(0xdff4ff, 1.6); // shapes the car armor (no shadows)
+    sun.position.set(-3, 10, 4);
+    this.scene.add(sun);
 
     this.arenaMat = arenaMaterial();
     this.scene.add(new THREE.Mesh(buildArenaGeometry(), this.arenaMat));
@@ -363,9 +416,11 @@ export class GameView {
     this.carTrails = [];
     for (const c of this.cars) {
       this.scene.add(c.group);
-      this.carTrails.push(new Ribbon(this.scene, 22, 0.3, c.color, 0.7));
+      // your own trail streams straight at the chase camera: keep it thin so it never hides your car
+      const own = this.carTrails.length === 0;
+      this.carTrails.push(new Ribbon(this.scene, 22, own ? 0.14 : 0.3, c.color, own ? 0.4 : 0.7));
     }
-    this.superTrails = [new Ribbon(this.scene, 30, 0.42, 0xffffff, 0.5), new Ribbon(this.scene, 30, 0.42, 0xffffff, 0.5)];
+    this.superTrails = [new Ribbon(this.scene, 30, 0.2, 0xffffff, 0.3), new Ribbon(this.scene, 30, 0.42, 0xffffff, 0.5)];
 
     // boost pads
     this.pads = [];
@@ -426,6 +481,7 @@ export class GameView {
   }
 
   resetTrails() {
+    this.snapNext = true; // serve / re-serve / new match teleports the car: cut, don't swoop
     this.ballTrail.clear();
     for (const t of this.carTrails) t.clear();
     for (const t of this.superTrails) t.clear();
@@ -466,9 +522,13 @@ export class GameView {
       const flick = 0.75 + Math.random() * 0.5;
       const on = car.boosting;
       v.flame.visible = v.flameCore.visible = on;
+      v.turbineCore.material.color.setHex(on ? 0xffc070 : 0x3a1c00);
+      // spin the wheels with forward speed (render only)
+      const fwd = (car.vel.x * car.R.f.x + car.vel.y * car.R.f.y + car.vel.z * car.R.f.z) * S;
+      for (const wh of v.wheels) wh.g.rotation.z -= (fwd * dt) / wh.r;
       if (on) { v.flame.scale.set(flick, 1, 1); v.flameCore.scale.set(0.6 * flick, 0.5, 0.5); }
       // trail from the rear of the car
-      const rear = this.tmpV.copy(f).multiplyScalar(-0.5).add(v.group.position).addScaledVector(u, 0.25);
+      const rear = this.tmpV.copy(f).multiplyScalar(-0.56).add(v.group.position).addScaledVector(u, 0.08); // turbine
       this.carTrails[i].push(rear, on);
       this.superTrails[i].push(rear, car.supersonic);
     });
@@ -495,7 +555,7 @@ export class GameView {
     const car = game.world.cars[0];
     const carP = tv(car.pos, new THREE.Vector3());
     const ballP = tv(game.world.ball.pos, new THREE.Vector3());
-    const dist = 3.4, height = 1.45; // ~RL default cam (distance 270-340 uu, height 100-145 uu)
+    const dist = 3.4, baseHeight = 1.45; // ~RL default cam (distance 270-340 uu, height 100-145 uu)
     let desiredFwd;
     const rear = this.rearView;
     if (rear) {
@@ -515,26 +575,59 @@ export class GameView {
     }
     if (desiredFwd.lengthSq() < 1e-4) desiredFwd.copy(this.camFwd);
     desiredFwd.normalize();
-    const snap = rear !== this.wasRear; // rear view switches instantly, both ways
+    const snap = rear !== this.wasRear || this.snapNext; // rear view switches instantly, both ways
+    this.snapNext = false;
     this.wasRear = rear;
-    const k = snap ? 1 : 1 - Math.exp(-dt * (this.ballCam && !rear ? 7 : rear ? 20 : 9));
+    const ballCam = this.ballCam && !rear;
+    const k = snap ? 1 : 1 - Math.exp(-dt * (ballCam ? 7 : rear ? 20 : 9));
     this.camFwd.lerp(desiredFwd, k).normalize();
+
+    // Ball cam drops the camera behind the car as the ball climbs (RL-style), so both fit.
+    let height = baseHeight;
+    if (ballCam) {
+      const elev = Math.atan2(ballP.y - carP.y, Math.hypot(ballP.x - carP.x, ballP.z - carP.z));
+      height = baseHeight - 0.85 * smooth01((elev - 0.2) / 0.7);
+    }
+    this.camHeight += (height - this.camHeight) * (snap ? 1 : 1 - Math.exp(-dt * 6));
+
     const target = carP.clone().addScaledVector(this.camFwd, -dist);
-    target.y = Math.max(carP.y, 0.2) + height;
+    target.y = Math.max(carP.y, 0.2) + this.camHeight;
     if (snap) this.camPos.copy(target); else this.camPos.lerp(target, 1 - Math.exp(-dt * 14));
     // keep the camera inside the arena
     this.camPos.x = Math.max(-K.ARENA_HALF_X * S + 0.6, Math.min(K.ARENA_HALF_X * S - 0.6, this.camPos.x));
     this.camPos.z = Math.max(-K.ARENA_HALF_Y * S + 0.6, Math.min(K.ARENA_HALF_Y * S - 0.6, this.camPos.z));
     this.camPos.y = Math.min(K.ARENA_HEIGHT * S - 0.5, Math.max(0.4, this.camPos.y));
     this.camera.position.copy(this.camPos);
-    const look = this.ballCam && !rear
-      ? ballP.clone().lerp(carP, 0.15)
-      : carP.clone().addScaledVector(this.camFwd, 2.2).add(new THREE.Vector3(0, 0.55, 0));
+
+    let look, fovExtra = 0;
+    if (ballCam) {
+      // Aim at the ball, but never pitch up so far that the car leaves the bottom of the screen.
+      // If the ball still doesn't fit, widen the FOV (up to +18 deg) rather than lose the car.
+      const cp = this.camPos;
+      const carCentre = carP.y + 0.15;
+      const alphaCar = Math.atan2(cp.y - carCentre, Math.max(0.5, Math.hypot(carP.x - cp.x, carP.z - cp.z))); // car below horizon
+      const beta = Math.atan2(ballP.y - cp.y, Math.max(0.5, Math.hypot(ballP.x - cp.x, ballP.z - cp.z)));      // ball above horizon
+      const frame = (fovDeg) => {
+        const half = (fovDeg * Math.PI) / 360;
+        let pitch = Math.min(beta - half * 0.1, half * 0.55 - alphaCar); // car stays in the lower-middle of the screen
+        pitch = Math.max(pitch, -alphaCar - half * 0.2);
+        return { pitch, fits: beta - pitch <= half * 0.72 }; // ball stays below the score HUD
+      };
+      const base = this.baseFov + this.fovKick;
+      let f = frame(base);
+      for (let extra = 3; !f.fits && extra <= 18; extra += 3) { fovExtra = extra; f = frame(base + extra); }
+      const dir = this.camFwd.clone().multiplyScalar(Math.cos(f.pitch));
+      dir.y = Math.sin(f.pitch);
+      look = cp.clone().addScaledVector(dir, 4);
+    } else {
+      look = carP.clone().addScaledVector(this.camFwd, 2.2).add(new THREE.Vector3(0, 0.55, 0));
+    }
     if (snap) this.camLook.copy(look); else this.camLook.lerp(look, 1 - Math.exp(-dt * 16));
     this.camera.lookAt(this.camLook);
     const kick = car.supersonic ? 7 : 0;
     this.fovKick += (kick - this.fovKick) * (1 - Math.exp(-dt * 5));
-    const fov = this.baseFov + this.fovKick;
+    this.fovExtra += (fovExtra - this.fovExtra) * (1 - Math.exp(-dt * 4));
+    const fov = this.baseFov + this.fovKick + this.fovExtra;
     if (Math.abs(this.camera.fov - fov) > 0.01) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
   }
 }
