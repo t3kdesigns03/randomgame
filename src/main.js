@@ -31,6 +31,19 @@ let last = performance.now();
 let debug = new URLSearchParams(location.search).has('debug');
 let callTimer = 0;
 const fps = { frames: 0, t: 0, value: 0, worst: 0, frameMs: 0 };
+const newStats = () => ({ hits: { [-1]: 0, [1]: 0 }, aces: { [-1]: 0, [1]: 0 }, faults: { [-1]: 0, [1]: 0 }, longest: 0 });
+let stats = newStats();
+
+// keyboard/mouse focus: the canvas takes focus whenever play starts or resumes, so a menu button
+// left focused can't swallow Space / Enter, and Tab never walks focus into hidden menus mid-match
+const canvas = $('view');
+canvas.tabIndex = -1;
+function focusGame() {
+  if (document.activeElement && document.activeElement !== canvas) document.activeElement.blur?.();
+  canvas.focus({ preventScroll: true });
+}
+function syncInGame() { input.inGame = running && !paused && game?.state !== 'over'; }
+input.onPointerDown = focusGame;
 
 // ---------------------------------------------------------------- screens
 function show(id) {
@@ -41,6 +54,9 @@ function startMatch() {
   game = new Game({ mode, playerProfile: input.profile });
   view.resetTrails();
   running = true; paused = false; acc = 0;
+  stats = newStats();
+  syncInGame();
+  focusGame();
   show(null);
   $('hud').classList.remove('hidden');
   $('targetLbl').textContent = mode === 'quick' ? 'FIRST TO 7' : 'TO 11 · WIN BY 2';
@@ -57,10 +73,13 @@ function pause(on) {
   show(on ? 'pause' : null);
   touch.reset();
   input.clearTaps();
+  syncInGame();
+  if (!on) focusGame();
   $('muteBtn').textContent = `Sound: ${sfx.muted ? 'off' : 'on'}`;
 }
 function quitToMenu() {
   running = false; paused = false; game = null;
+  syncInGame();
   $('hud').classList.add('hidden');
   show('menu');
 }
@@ -111,7 +130,7 @@ for (const r of document.querySelectorAll('input[name=mode]')) r.addEventListene
 input.onAction = (a) => {
   if (a === 'pause') { if (!$('howto').classList.contains('hidden')) hideHowTo(); else if (running) pause(!paused); }
   else if (a === 'reserve' && running && !paused) { game.reserve(); view.resetTrails(); }
-  else if (a === 'ballcam') view.ballCam = !view.ballCam;
+  else if (a === 'ballcam' && running && !paused) view.ballCam = !view.ballCam;
   else if (a === 'mute') sfx.toggleMute();
   else if (a === 'debug') debug = !debug;
   else if (a === 'help') { const h = $('keysHint'); h.classList.toggle('hidden'); store.set('rp_keys_hint', h.classList.contains('hidden') ? '0' : '1'); }
@@ -155,12 +174,17 @@ function showCall(call) {
 function handleFeed(feed) {
   for (const e of feed) {
     switch (e.type) {
-      case 'touch': sfx.hit(e.relSpeed || 500); break;
+      case 'touch': sfx.hit(e.relSpeed || 500); if (e.team in stats.hits) stats.hits[e.team]++; break;
       case 'floor': case 'wall': sfx.bounce(e.speed); break;
       case 'net': sfx.net(); break;
       case 'pad': if (e.team === -1) sfx.pad(e.big); break;
       case 'jump': if (e.team === -1) sfx.jump(); break;
-      case 'call': showCall(e.call); sfx.point(e.call.winner === -1); break;
+      case 'call':
+        showCall(e.call); sfx.point(e.call.winner === -1);
+        stats.longest = Math.max(stats.longest, e.call.rally || 0);
+        if (e.call.reason === 'ACE') stats.aces[e.call.winner]++;
+        if (e.call.kind === 'fault') stats.faults[-e.call.winner]++;
+        break;
       case 'serve': view.resetTrails(); break;
       default: break;
     }
@@ -183,6 +207,7 @@ function updateHud(dt) {
   $('boostArc').style.strokeDashoffset = String(169.6 * (1 - car.boost / K.BOOST_MAX));
   setText('speedNum', String(Math.round(len(car.vel) * 0.036)));
   $('superTag').classList.toggle('on', car.supersonic);
+  updateScoreboard(m);
   if (callTimer > 0) { callTimer -= dt; if (callTimer <= 0) $('call').classList.add('hidden'); }
   if (game.state === 'serve' && game.stateTime < 0.05) {
     const el = $('call');
@@ -198,6 +223,20 @@ function updateHud(dt) {
       `car ${car.pos.x.toFixed(0)},${car.pos.y.toFixed(0)},${car.pos.z.toFixed(0)} spd ${len(car.vel).toFixed(0)} ${car.onGround ? 'ground' : 'air'}${car.flipping ? ' FLIP' : ''}\n` +
       `ball spd ${len(game.world.ball.vel).toFixed(0)} z ${game.world.ball.pos.z.toFixed(0)}  bot plan ${game.bot.plan ? (game.bot.plan.leave ? 'leave' : 'shot') : '-'}`;
   }
+}
+
+// hold Tab: scoreboard overlay
+function updateScoreboard(m) {
+  const on = input.held('scoreboard') && running && !paused;
+  $('scoreboard').classList.toggle('hidden', !on);
+  if (!on) return;
+  const row = (team) => [m.score[team], stats.hits[team], stats.aces[team], stats.faults[team]];
+  const you = row(-1), bot = row(1);
+  for (let i = 0; i < 4; i++) { setText(`sbYou${i}`, String(you[i])); setText(`sbBot${i}`, String(bot[i])); }
+  setText('sbMode', mode === 'quick' ? 'QUICK · FIRST TO 7' : 'FULL · TO 11 · WIN BY 2');
+  setText('sbServe', m.server === -1 ? 'YOU' : 'BOT');
+  setText('sbRally', String(m.rally ? m.rally.hits : 0));
+  setText('sbLongest', String(stats.longest));
 }
 
 function gameOver() {
@@ -239,11 +278,12 @@ function frame(t, fromRaf = false) {
     if (n === 6) acc = 0;
     handleFeed(game.drainFeed());
   }
+  view.rearView = running && !paused && input.held('rearView');
   view.render(game, paused ? 0 : dt, t / 1000);
   updateHud(dt);
   fps.frameMs = performance.now() - t0;
   if (running && !paused) adapt(dt * 1000);
-  if (game.state === 'over' && !wasOver) gameOver();
+  if (game.state === 'over' && !wasOver) { gameOver(); syncInGame(); }
   wasOver = game.state === 'over';
 }
 
@@ -270,4 +310,9 @@ window.__rp = {
     return game && { state: game.state, score: { ...game.match.score }, t: +game.time.toFixed(2) };
   },
   key(code, down) { dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', { code, bubbles: true })); },
+  /** Mouse button (0 left, 1 middle, 2 right) pressed on the canvas / released on the window. */
+  mouse(button, down) {
+    const opts = { button, buttons: down ? [1, 4, 2][button] : 0, bubbles: true, cancelable: true };
+    (down ? canvas : window).dispatchEvent(new MouseEvent(down ? 'mousedown' : 'mouseup', opts));
+  },
 };

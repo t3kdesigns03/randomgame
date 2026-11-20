@@ -28,7 +28,18 @@
         <div class="speed"><span id="speedNum">0</span><small>KPH</small><b id="superTag">SUPERSONIC</b></div>
       </div>
       <div class="call hidden" id="call"><div class="call-main" id="callMain">POINT</div><div class="call-sub" id="callSub"></div></div>
-      <div class="keys-hint hidden" id="keysHint">WASD drive · SPACE jump (again + direction = flip) · SHIFT boost · Q/E air roll / powerslide · R re-serve · C ball cam · ESC pause · H hide</div>
+      <div class="keys-hint hidden" id="keysHint">WASD drive · RMB jump (again + direction = flip) · LMB boost · SHIFT powerslide / free air roll · Q/E air roll · SPACE ball cam · MMB rear view · TAB scores · R re-serve · ESC pause · H hide</div>
+      <div class="scoreboard hidden" id="scoreboard" aria-live="off">
+        <div class="sb-head" id="sbMode">QUICK · FIRST TO 7</div>
+        <table>
+          <thead><tr><th></th><th>PTS</th><th>HITS</th><th>ACES</th><th>FAULTS</th></tr></thead>
+          <tbody>
+            <tr class="you"><td>YOU</td><td id="sbYou0">0</td><td id="sbYou1">0</td><td id="sbYou2">0</td><td id="sbYou3">0</td></tr>
+            <tr class="bot"><td>BOT</td><td id="sbBot0">0</td><td id="sbBot1">0</td><td id="sbBot2">0</td><td id="sbBot3">0</td></tr>
+          </tbody>
+        </table>
+        <div class="sb-foot">SERVE <b id="sbServe">YOU</b> · RALLY <b id="sbRally">0</b> · LONGEST <b id="sbLongest">0</b></div>
+      </div>
       <div class="debug hidden" id="debug"></div>
     </div>
 
@@ -82,11 +93,14 @@
             <p><b>JUMP</b> — tap; tap again in the air + push the stick to flip</p>
             <p><b>BOOST</b> — hold</p>
             <p><b>AIR ROLL</b> — roll in the air · drift on the ground</p></div>
-          <div class="ctrl-col"><h3>Keyboard</h3>
+          <div class="ctrl-col"><h3>Keyboard + mouse</h3>
             <p><b>W A S D</b> / arrows — drive</p>
-            <p><b>Space</b> — jump; again + direction = flip</p>
-            <p><b>Shift</b> — boost · <b>Q / E</b> — air roll</p>
-            <p><b>R</b> re-serve · <b>C</b> ball cam · <b>Esc</b> pause</p></div>
+            <p><b>Right mouse</b> — jump; again + direction = flip</p>
+            <p><b>Left mouse</b> — boost</p>
+            <p><b>Shift</b> — powerslide · free air roll in the air · <b>Q / E</b> — air roll left / right</p>
+            <p><b>Space</b> ball cam · <b>Middle mouse</b> rear view · <b>Tab</b> scores</p>
+            <p><b>R</b> re-serve · <b>Esc</b> pause · <b>H</b> hide hints</p>
+            <p class="dim">No mouse? <b>K</b> jump · <b>J</b> boost</p></div>
         </div>
         <button class="btn primary" id="howClose">Got it <span id="howCount"></span></button>
       </div>
